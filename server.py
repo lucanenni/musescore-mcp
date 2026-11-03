@@ -648,10 +648,25 @@ class MuseScoreMCP:
             destMeasure: int  # first destination measure; existing content there is overwritten
             firstStaff: NotRequired[int]  # default: all staves
             lastStaff: NotRequired[int]
+            destStaff: NotRequired[int]  # paste onto this staff (and the following ones) instead of the source staves
 
         class copyMeasuresAction(TypedDict):
             action: Literal["copyMeasures"]
             params: copyMeasuresParams
+
+        class setNotePitchesEdit(TypedDict):
+            tick: int  # start tick of an existing chord on voice 0
+            pitch: NotRequired[int]  # concert MIDI pitch for a single-note chord
+            pitches: NotRequired[List[int]]  # or one pitch per note of a chord (same note count)
+
+        class setNotePitchesParams(TypedDict):
+            staff: int
+            edits: List[setNotePitchesEdit]
+            flats: NotRequired[bool]  # spell black keys as flats (default: sharps)
+
+        class setNotePitchesAction(TypedDict):
+            action: Literal["setNotePitches"]
+            params: setNotePitchesParams
 
         class transposeParams(TypedDict):
             staff: int
@@ -770,7 +785,7 @@ class MuseScoreMCP:
             action: Literal["setVoice"]
             params: setVoiceParams
 
-        type ActionSequence = List[getScoreAction | addNoteAction | addRestAction | addTupletAction | appendMeasureAction | deleteSelectionAction | getCursorInfoAction | goToMeasureAction | nextElementAction | prevElementAction | selectCurrentMeasureAction | insertMeasureAction | goToFinalMeasureAction | goToBeginningOfScoreAction | setTimeSignatureAction | undoAction | nextStaffAction | prevStaffAction | setStringFretAction | selectCustomRangeAction | addLyricsAction | setNoteSpellingAction | setNoteHeadsAction | addDynamicAction | addHairpinAction | addArticulationAction | addTextAction | addSlurAction | addTieAction | moveToVoiceAction | setPartVisibleAction | setStyleAction | addChordSymbolAction | copyMeasuresAction | transposeAction | introspectAction | removePartAction | addMarkerAction | addJumpAction | setScoreTextAction | setBarlineAction | addClefAction | exportScoreAction | exportPartsAction | saveScoreAction | deleteMeasuresAction | setTitleAction | setTempoAction | addInstrumentAction | setVoiceAction]
+        type ActionSequence = List[getScoreAction | addNoteAction | addRestAction | addTupletAction | appendMeasureAction | deleteSelectionAction | getCursorInfoAction | goToMeasureAction | nextElementAction | prevElementAction | selectCurrentMeasureAction | insertMeasureAction | goToFinalMeasureAction | goToBeginningOfScoreAction | setTimeSignatureAction | undoAction | nextStaffAction | prevStaffAction | setStringFretAction | selectCustomRangeAction | addLyricsAction | setNoteSpellingAction | setNoteHeadsAction | addDynamicAction | addHairpinAction | addArticulationAction | addTextAction | addSlurAction | addTieAction | moveToVoiceAction | setPartVisibleAction | setStyleAction | addChordSymbolAction | copyMeasuresAction | setNotePitchesAction | transposeAction | introspectAction | removePartAction | addMarkerAction | addJumpAction | setScoreTextAction | setBarlineAction | addClefAction | exportScoreAction | exportPartsAction | saveScoreAction | deleteMeasuresAction | setTitleAction | setTempoAction | addInstrumentAction | setVoiceAction]
 
         @self.mcp.tool()
         async def processSequence(sequence: ActionSequence):

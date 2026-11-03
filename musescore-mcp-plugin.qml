@@ -92,6 +92,7 @@ MuseScore {
             "setStyle",
             "addChordSymbol",
             "copyMeasures",
+            "setNotePitches",
             "transpose",
             "deleteMeasures",
             "setTitle",
@@ -226,6 +227,8 @@ MuseScore {
                 return addChordSymbol(command.params);
             case "copyMeasures":
                 return copyMeasures(command.params);
+            case "setNotePitches":
+                return setNotePitches(command.params);
             case "transpose":
                 return transpose(command.params);
             case "setScoreText":
@@ -2416,6 +2419,50 @@ MuseScore {
         return { start: st, end: en, total: idx - 1 };
     }
 
+    // Rewrites the pitches of EXISTING notes on one staff (voice 0), keeping rhythm, ties, dynamics and
+    // articulations: used after copyMeasures to turn a copied line into a new part. params:
+    //   staff, edits: [{ tick, pitch }] (single note) or [{ tick, pitches: [..] }] (same note count),
+    //   flats (default false): spell black keys as flats instead of sharps.
+    // Pitches are CONCERT pitch; the written spelling of a transposing instrument is kept by shifting
+    // tpc2 by the same amount the existing note already had relative to tpc1.
+    function setNotePitches(params) {
+        if (!curScore) return { error: "No score open" };
+        var bad = needNumbers(params, ["staff"]);
+        if (bad) return { error: bad };
+        if (!Array.isArray(params.edits) || params.edits.length === 0) return { error: "edits must be a non-empty array" };
+        var sharpTpc = [14, 21, 16, 23, 18, 13, 20, 15, 22, 17, 24, 19];
+        var flatTpc = [14, 9, 16, 11, 18, 13, 8, 15, 10, 17, 12, 19];
+        var table = params.flats === true ? flatTpc : sharpTpc;
+        var failed = [], done = 0;
+        curScore.startCmd();
+        try {
+            for (var i = 0; i < params.edits.length; i++) {
+                var ed = params.edits[i];
+                var c = plainCursorAt(params.staff, ed.tick);
+                var el = c.element;
+                if (c.tick !== ed.tick || !el || el.type !== Element.CHORD) { failed.push(ed.tick + " (no chord)"); continue; }
+                var want = ed.pitches !== undefined ? ed.pitches : [ed.pitch];
+                if (!el.notes || el.notes.length !== want.length) { failed.push(ed.tick + " (" + (el.notes ? el.notes.length : 0) + " notes, expected " + want.length + ")"); continue; }
+                for (var k = 0; k < want.length; k++) {
+                    var n = el.notes[k];
+                    var shift = n.tpc2 - n.tpc1;
+                    n.pitch = want[k];
+                    var t1 = table[((want[k] % 12) + 12) % 12];
+                    n.tpc1 = t1;
+                    n.tpc2 = t1 + shift;
+                }
+                done++;
+            }
+            curScore.endCmd();
+            var out = { success: failed.length === 0, message: done + " chord(s) rewritten" };
+            if (failed.length) out.failed = failed;
+            return out;
+        } catch (e) {
+            curScore.endCmd(true);
+            return { error: e.toString() };
+        }
+    }
+
     // Show / hide a whole instrument (the eye icon in the Instruments panel) via Part.show.
     function setPartVisible(params) {
         if (!curScore) return { error: "No score open" };
@@ -2492,11 +2539,15 @@ MuseScore {
             if (src.start === null || src.end === null || dst.start === null || params.startMeasure > params.endMeasure) throw new Error("invalid measure range (score has " + src.total + " measures)");
             var s0 = params.firstStaff !== undefined ? params.firstStaff : 0;
             var s1 = params.lastStaff !== undefined ? params.lastStaff + 1 : curScore.nstaves;
+            // destStaff pastes onto another staff (the same number of staves, starting there).
+            var d0 = params.destStaff !== undefined ? params.destStaff : s0;
+            var d1 = d0 + (s1 - s0);
+            if (d1 > curScore.nstaves) throw new Error("destStaff " + d0 + " leaves no room for " + (s1 - s0) + " staff/staves");
             curScore.selection.clear();
             curScore.selection.selectRange(src.start, src.end, s0, s1);
             cmd("copy");
             curScore.selection.clear();
-            curScore.selection.selectRange(dst.start, dst.end, s0, s1);
+            curScore.selection.selectRange(dst.start, dst.end, d0, d1);
             cmd("paste");
             return { success: true, message: "Measures " + params.startMeasure + "-" + params.endMeasure + " copied to " + params.destMeasure };
         } catch (e) {
