@@ -27,7 +27,8 @@ class MuseScoreClient:
     async def connect(self):
         """Connect to the MuseScore WebSocket API."""
         try:
-            self.websocket = await websockets.connect(self.uri)
+            # The default 1 MiB frame limit is too small for a full dump of a large score (~2 MB+).
+            self.websocket = await websockets.connect(self.uri, max_size=64 * 1024 * 1024)
             logger.info(f"Connected to MuseScore API at {self.uri}")
             return True
         except Exception as e:
